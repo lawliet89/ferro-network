@@ -199,19 +199,36 @@ module.
 |---|---|
 | [AGENT.md](AGENT.md) | Operating rules for coding agents. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | This file. |
-| [PLAN.md](PLAN.md) | Phased build plan and deferred items. |
+| [PLAN.md](PLAN.md) | Phased build plan, settled decisions, open questions, deferred items. |
+| [PROGRESS.md](PROGRESS.md) | Chronological decision log. |
+| [Cargo.toml](Cargo.toml) | Workspace manifest. `resolver = "3"`, edition 2024, shared `[workspace.dependencies]`, lint policy (`pedantic + nursery` warn; `unsafe_code = "forbid"`; `allow_attributes{,_without_reason}` push `#[allow]` → `#[expect(reason)]`). |
+| [rust-toolchain.toml](rust-toolchain.toml) | Pins the stable channel + `rustfmt`, `clippy`. |
+| [rustfmt.toml](rustfmt.toml) | `edition = "2024"`, `max_width = 100`. |
+| [deny.toml](deny.toml) | License allow-list, advisories, source allow-list. |
+| [.github/workflows/ci.yml](.github/workflows/ci.yml) | fmt → clippy → test → deny. Refuses to run if `UNIFI_NETWORK_*` env vars are present. |
+| [scripts/pre-commit](scripts/pre-commit) | Local hook: fmt + clippy. |
+| [.env.example](.env.example) | Template for `UNIFI_NETWORK_*` vars. |
+| [docs/](docs/) | Chore briefs (`TASK_*.md`) and the historical bootstrap brief. |
 
 ### `crates/ferro-network/` (library)
 
-_Empty until phase 0._
+| Path | What |
+|---|---|
+| [Cargo.toml](crates/ferro-network/Cargo.toml) | Library manifest. |
+| [src/lib.rs](crates/ferro-network/src/lib.rs) | Crate root. Stub until phase 1. |
 
 ### `crates/ferro-network-cli/` (CLI)
 
-_Empty until phase 0._
+| Path | What |
+|---|---|
+| [Cargo.toml](crates/ferro-network-cli/Cargo.toml) | CLI manifest; binary name `ferro-network`. |
+| [src/main.rs](crates/ferro-network-cli/src/main.rs) | Stub until phase 2. |
 
 ### `third_party/unifi-apis/` (submodule)
 
-_Added in phase 0._
+The OpenAPI specs published at <https://github.com/beezly/unifi-apis>,
+pinned at a specific commit. The current spec is
+`third_party/unifi-apis/unifi-network/{SPEC_VERSION}.json`.
 
 ---
 

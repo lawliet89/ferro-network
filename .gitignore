@@ -1,0 +1,15 @@
+/target
+**/target/
+**/*.rs.bk
+*.swp
+*.swo
+.DS_Store
+/PROGRESS.md.bak
+.idea/
+.vscode/
+.direnv/
+# insta pending snapshots — only the accepted .snap should be committed
+**/*.snap.new
+# local secrets / live-test config
+.env
+.env.local
