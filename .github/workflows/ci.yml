@@ -38,7 +38,9 @@ jobs:
         run: |
           if env | grep -q '^UNIFI_NETWORK_'; then
             echo "::error::UNIFI_NETWORK_* env vars must not be set in CI" >&2
-            env | grep '^UNIFI_NETWORK_' >&2 || true
+            # Names only: values may be API keys, and repository
+            # variables are not masked in job logs.
+            env | grep '^UNIFI_NETWORK_' | cut -d= -f1 >&2 || true
             exit 1
           fi
 
