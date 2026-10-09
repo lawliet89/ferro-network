@@ -5,7 +5,7 @@ to load the shape of the project into your head before you start reading
 source files.
 
 If you want to **use** the library or CLI, read [README.md](README.md).
-If you want to **bump the spec version**, read `UPGRADING.md`. The
+If you want to **bump the spec version**, read [UPGRADING.md](UPGRADING.md). The
 **history of decisions** is in `PROGRESS.md`; the phased build plan is in
 [PLAN.md](PLAN.md). If you are an **agent** about to make changes, read
 [AGENT.md](AGENT.md) first.
@@ -14,9 +14,10 @@ This document is a living one. It is updated whenever a phase changes a
 structural decision, adds a module category, or introduces an invariant.
 See [AGENT.md → Architecture documentation maintenance](AGENT.md#architecture-documentation-maintenance).
 
-> **Status: skeleton.** Written before phase 0. The diagram, rationale,
-> and invariants describe the target shape; the file map is filled in as
-> phases land.
+> **Status: phase 1.** The codegen pipeline and the `models.rs` seam
+> exist; the client surface (phase 2 onward) does not yet. The diagram,
+> rationale, and invariants describe the target shape; the file map
+> describes what is on disk.
 
 ---
 
@@ -120,10 +121,22 @@ helpers is small, uniform, and easy to review.
 `build_support/spec_rewrite.rs` applies schema-only preprocessing before
 typify sees the spec. It is a pure function (`Value -> Value`, no I/O),
 shared with tests, and every rule matches on JSON Schema *structure*,
-never on runtime-observed values. The Network spec needs rules Protect
-did not, most importantly turning the spec's
-`discriminator`-without-`oneOf` pattern into real tagged unions (see
-PLAN.md phase 1).
+never on schema names or runtime-observed values. The Network spec needs
+rules Protect did not, most importantly turning the spec's
+`discriminator`-without-`oneOf` pattern into real unions.
+
+### Discriminated unions are enums of named variants
+
+The spec models polymorphism Java-style (a base with a `discriminator`,
+subtypes that `allOf` it, no `oneOf`), which typify ignores. The rewrite
+replaces each base with a `oneOf` over its mapping targets and pins each
+target's tag property to its tag value(s). typify then emits an
+`#[serde(untagged)]` enum with one newtype variant per named target
+(`NetworkDetails::UnmanagedNetworkDetails(UnmanagedNetworkDetails)`). The
+pins make the variants mutually exclusive, and each payload carries its
+tag, so it round-trips. An internally tagged `#[serde(tag)]` enum would
+need inline struct variants and lose the nameable payload types. The cost
+is serde's generic "did not match any variant" error on a decode failure.
 
 ### The `models.rs` seam absorbs spec changes
 
@@ -201,12 +214,14 @@ module.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | This file. |
 | [PLAN.md](PLAN.md) | Phased build plan, settled decisions, open questions, deferred items. |
 | [PROGRESS.md](PROGRESS.md) | Chronological decision log. |
+| [UPGRADING.md](UPGRADING.md) | Spec bump procedure, rewrite-rule catalogue, codegen triage. |
 | [Cargo.toml](Cargo.toml) | Workspace manifest. `resolver = "3"`, edition 2024, shared `[workspace.dependencies]`, lint policy (`pedantic + nursery` warn; `unsafe_code = "forbid"`; `allow_attributes{,_without_reason}` push `#[allow]` → `#[expect(reason)]`). |
 | [rust-toolchain.toml](rust-toolchain.toml) | Pins the stable channel + `rustfmt`, `clippy`. |
 | [rustfmt.toml](rustfmt.toml) | `edition = "2024"`, `max_width = 100`. |
 | [deny.toml](deny.toml) | License allow-list, advisories, source allow-list. |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | fmt → clippy → test → deny. Refuses to run if `UNIFI_NETWORK_*` env vars are present. |
 | [scripts/pre-commit](scripts/pre-commit) | Local hook: fmt + clippy. |
+| [scripts/update-spec](scripts/update-spec) | No args: list spec versions in the submodule. With a version: fetch, bump `SPEC_VERSION`, run all four gates. |
 | [.env.example](.env.example) | Template for `UNIFI_NETWORK_*` vars. |
 | [docs/](docs/) | Chore briefs (`TASK_*.md`) and the historical bootstrap brief. |
 
@@ -215,7 +230,13 @@ module.
 | Path | What |
 |---|---|
 | [Cargo.toml](crates/ferro-network/Cargo.toml) | Library manifest. |
-| [src/lib.rs](crates/ferro-network/src/lib.rs) | Crate root. Stub until phase 1. |
+| [build.rs](crates/ferro-network/build.rs) | `SPEC_VERSION`; reads the spec, runs the rewrite, typify → `$OUT_DIR/generated.rs`. |
+| [build_support/spec_rewrite.rs](crates/ferro-network/build_support/spec_rewrite.rs) | Pure structural spec preprocessing (`rewrite()`); each rule documents the schemas that need it. Shared with tests via `#[path]`. |
+| [src/lib.rs](crates/ferro-network/src/lib.rs) | Crate root. |
+| [src/generated.rs](crates/ferro-network/src/generated.rs) | Private; `include!`s the typify output under one reasoned `#![allow]`. |
+| [src/models.rs](crates/ferro-network/src/models.rs) | **The seam.** Public re-exports of generated types; in-crate test for page DTOs (not re-exported). |
+| [tests/model_codegen.rs](crates/ferro-network/tests/model_codegen.rs) | Seam fingerprints, union round-trips, and unit tests for every rewrite rule. |
+| [tests/fixtures/](crates/ferro-network/tests/fixtures/) | Spec-shaped JSON fixtures. |
 
 ### `crates/ferro-network-cli/` (CLI)
 
