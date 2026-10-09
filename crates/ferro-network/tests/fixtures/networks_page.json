@@ -1,0 +1,27 @@
+{
+  "offset": 0,
+  "limit": 25,
+  "count": 2,
+  "totalCount": 2,
+  "data": [
+    {
+      "management": "GATEWAY",
+      "id": "5e1b3c2a-8f4d-4e6b-9a7c-1d2e3f405162",
+      "name": "Default Network",
+      "enabled": true,
+      "vlanId": 1,
+      "metadata": { "origin": "SYSTEM_DEFINED" },
+      "default": true,
+      "zoneId": "0b7f6e5d-4c3b-4a29-8817-26354a5b6c7d"
+    },
+    {
+      "management": "UNMANAGED",
+      "id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "name": "Lab",
+      "enabled": false,
+      "vlanId": 40,
+      "metadata": { "origin": "USER_DEFINED" },
+      "default": false
+    }
+  ]
+}

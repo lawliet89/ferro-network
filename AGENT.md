@@ -21,7 +21,7 @@ For *how the code is shaped*:
 
 - **Architecture overview** — [ARCHITECTURE.md](ARCHITECTURE.md).
   Diagram, file map, invariants, reading order.
-- **Spec upgrade procedure** — `UPGRADING.md` (lands in phase 1).
+- **Spec upgrade procedure** — [UPGRADING.md](UPGRADING.md).
 - **Historical decisions** — `PROGRESS.md` (created on first run).
   Chronological log; read when something in the code surprises you.
 

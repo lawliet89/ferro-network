@@ -613,6 +613,31 @@ the spec's documented syntax.
 **Trigger.** First spec bump that renames one of them, or the first
 external consumer. (Less pressing here: most IDs are `uuid::Uuid`.)
 
+### Diagnosable decode errors for discriminated unions
+
+**Symptom.** Lifted unions are `#[serde(untagged)]` enums (see
+PROGRESS.md, phase 1). When a response drifts from the spec (a missing
+"required" field, say), serde reports only `data did not match any
+variant of untagged enum NetworkDetails`, not which field failed.
+
+**Trigger.** The first live decode failure on a union that takes more
+than a quick look to diagnose. Options then: a generated
+`Deserialize` that peeks at the tag and decodes the matching variant
+(post-processing typify's output in `build.rs`), or a debug helper that
+retries each variant and reports every error.
+
+### Firewall "named protocol" unions are not lifted
+
+**Symptom.** In the three `Firewall policy … named protocol` schemas
+the discriminator mapping keys (`AX_25`, `ICMPV6`) contradict the tag
+property's own `enum` (`ax.25`, `icmpv6`), so `lift_discriminators_to_one_of`
+leaves them as plain structs. The ICMP / ICMPv6 variants' extra
+`typenameFilter` field is unreachable through them.
+
+**Trigger.** Phase 5 firewall policies read (or phase 6 writes):
+capture a live policy that uses a named protocol, see which spelling
+the wire uses, and teach the rule that spelling.
+
 ---
 
 ## Reference: spec source
