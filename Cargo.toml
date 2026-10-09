@@ -8,6 +8,9 @@ rust-version = "1.85"
 license = "Apache-2.0"
 repository = "https://github.com/lawliet89/ferro-network"
 authors = ["Yong Wen Chua"]
+# Not on crates.io: the build script reads the spec from the submodule,
+# outside the package root. See PLAN.md "Deferred" before flipping this.
+publish = false
 
 # Shared dependency versions. Each phase adds the crates it starts using;
 # member crates opt in with `<name> = { workspace = true }`.

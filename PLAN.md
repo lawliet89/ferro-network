@@ -613,6 +613,21 @@ the spec's documented syntax.
 **Trigger.** First spec bump that renames one of them, or the first
 external consumer. (Less pressing here: most IDs are `uuid::Uuid`.)
 
+### Publishing to crates.io
+
+**Symptom.** Both crates set `publish = false`. `build.rs` reads the
+spec from `third_party/unifi-apis`, outside the `ferro-network` package
+root, so a crates.io archive would not contain it and every registry
+build would fail in the build script.
+
+**Trigger.** A decision to publish (at the latest, phase 8 before
+tagging 0.1.0). Options then: copy the pinned spec into the package at
+`cargo package` time (an `include`d file kept in sync by
+`scripts/update-spec`, with `build.rs` preferring the submodule when
+present), or ship the generated `models` source. Either way, add a CI
+step that builds the packaged crate (`cargo package` + build from the
+`.crate`) so the failure mode stays covered.
+
 ### Diagnosable decode errors for discriminated unions
 
 **Symptom.** Lifted unions are `#[serde(untagged)]` enums (see
