@@ -14,6 +14,9 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SUBMODULE="$REPO_ROOT/third_party/unifi-apis"
 SPEC_DIR="$SUBMODULE/unifi-network"
 BUILD_RS="$REPO_ROOT/crates/ferro-network/build.rs"
+# README.md repeats the pinned version for users; kept in sync below.
+README="$REPO_ROOT/README.md"
+README_PATTERN='Targets Network application version \*\*[^*]+\*\*'
 
 cd "$REPO_ROOT"
 
@@ -64,6 +67,11 @@ if [[ ! -f "$spec_file" ]]; then
   echo "  run scripts/update-spec with no args to list available versions" >&2
   exit 1
 fi
+if ! grep -qE "$README_PATTERN" "$README"; then
+  echo "error: README.md no longer says 'Targets Network application version **X**'" >&2
+  echo "  update README_PATTERN in this script to match the new wording" >&2
+  exit 1
+fi
 
 current="$(current_version)"
 if [[ "$current" == "$new_version" ]]; then
@@ -75,6 +83,10 @@ else
     "$BUILD_RS"
   rm -f "${BUILD_RS}.bak"
 fi
+sed -i.bak -E \
+  "s|$README_PATTERN|Targets Network application version **${new_version}**|" \
+  "$README"
+rm -f "${README}.bak"
 
 # touching build.rs ensures cargo re-runs the build script even if its
 # fingerprint thinks nothing changed
@@ -97,5 +109,5 @@ echo "All checks passed."
 echo "Submodule now at: $(git -C "$SUBMODULE" rev-parse --short HEAD)"
 echo
 echo "Next steps:"
-echo "  git add third_party/unifi-apis ${BUILD_RS#"$REPO_ROOT"/}"
+echo "  git add third_party/unifi-apis ${BUILD_RS#"$REPO_ROOT"/} ${README#"$REPO_ROOT"/}"
 echo "  git commit -m 'chore(spec): bump Network spec to $new_version'"

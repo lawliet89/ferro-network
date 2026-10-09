@@ -18,11 +18,13 @@ With a version argument the script:
 
 1. Fetches `third_party/unifi-apis` and checks out `origin/HEAD`; the
    requested version must exist there.
-2. Rewrites the `SPEC_VERSION` line in `build.rs` and touches the file.
+2. Rewrites the `SPEC_VERSION` line in `build.rs` (and touches it so the
+   build script re-runs) and the version claim in `README.md`.
 3. Runs `cargo build`, `fmt --check`, `clippy`, `test --all`, `deny check`.
 4. Prints the new submodule SHA and the `git add` / `git commit` to run.
 
-If every step passes, commit the submodule and `build.rs` together.
+If every step passes, commit the submodule, `build.rs`, and `README.md`
+together.
 Step one version at a time, newest minor first.
 
 ## When codegen fails
