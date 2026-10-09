@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel any in-progress run for the same ref when a new commit is pushed.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  # Redundant with GitHub Actions' default CI=true (insta already keys off
+  # that), but explicit is friendlier to anyone reading the workflow.
+  INSTA_UPDATE: "no"
+
+jobs:
+  check:
+    name: fmt / clippy / test / deny
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Safety belt: live tests + CLI both read UNIFI_NETWORK_* env vars
+      # and would happily hit a real UniFi console if any of them leaked
+      # into the runner environment (e.g. via a repo secret misconfigured
+      # as a var). Fail loud and early instead.
+      - name: Forbid live-console env vars in CI
+        run: |
+          if env | grep -q '^UNIFI_NETWORK_'; then
+            echo "::error::UNIFI_NETWORK_* env vars must not be set in CI" >&2
+            # Names only: values may be API keys, and repository
+            # variables are not masked in job logs.
+            env | grep '^UNIFI_NETWORK_' | cut -d= -f1 >&2 || true
+            exit 1
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --locked --all
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: cargo deny check
+        run: cargo deny --locked check
