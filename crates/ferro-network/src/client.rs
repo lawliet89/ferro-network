@@ -167,13 +167,7 @@ impl NetworkClientBuilder {
         let api_key = self.api_key.ok_or(Error::MissingApiKey)?;
         let base_url = match (self.host, self.base_url) {
             (Some(host), None) => {
-                // `https://https://x` and `https://x/y/proxy/...` both
-                // parse as URLs, so a scheme or path has to be caught here.
-                if host.is_empty() || host.contains('/') {
-                    return Err(Error::InvalidUrl(format!(
-                        "host {host:?} must be a hostname or host:port, without scheme or path"
-                    )));
-                }
+                validate_host(&host)?;
                 parse_base_url(&format!("https://{host}{UNIFI_OS_PREFIX}"))?
             }
             (None, Some(url)) => parse_base_url(&url)?,
@@ -220,20 +214,47 @@ impl NetworkClientBuilder {
     }
 }
 
+/// Accept only characters that can appear in a hostname, an IP address
+/// (IPv6 in brackets), and a `:port` suffix.
+///
+/// An allowlist rather than a check for `/`: URL parsing gives meaning to
+/// `?`, `#`, `@` (user-info), `\\` and whitespace, so a host containing any
+/// of them could silently send requests to a different authority or path
+/// than the caller wrote (`https://https://x` even parses).
+fn validate_host(host: &str) -> Result<()> {
+    let allowed = |c: char| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '[' | ']');
+    if host.is_empty() || !host.chars().all(allowed) {
+        return Err(Error::InvalidUrl(format!(
+            "host {host:?} must be a hostname, IP address, or host:port, without scheme or path"
+        )));
+    }
+    Ok(())
+}
+
 /// Parse a base URL, adding the trailing slash that `Url::join` needs to
 /// append (rather than replace) the last path segment.
+///
+/// Rejects schemes other than `http(s)` and URLs carrying user-info, a
+/// query, or a fragment: none belongs in a base URL, and each would be
+/// silently dropped or mangled when request paths are joined on.
 fn parse_base_url(raw: &str) -> Result<Url> {
     let mut raw = raw.to_string();
     if !raw.ends_with('/') {
         raw.push('/');
     }
-    let url = Url::parse(&raw).map_err(|e| Error::InvalidUrl(format!("{raw}: {e}")))?;
-    match url.scheme() {
-        "https" | "http" => Ok(url),
-        other => Err(Error::InvalidUrl(format!(
-            "{raw}: unsupported scheme {other:?}"
-        ))),
+    // Errors never echo `raw`: it may contain credentials.
+    let rejected = |problem: &str| Error::InvalidUrl(format!("base URL rejected: {problem}"));
+    let url = Url::parse(&raw).map_err(|e| rejected(&e.to_string()))?;
+    if !matches!(url.scheme(), "https" | "http") {
+        return Err(rejected(&format!("unsupported scheme {:?}", url.scheme())));
     }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(rejected("credentials in the URL are not supported"));
+    }
+    if url.query().is_some() || url.fragment().is_some() {
+        return Err(rejected("a base URL cannot have a query or fragment"));
+    }
+    Ok(url)
 }
 
 #[cfg(test)]
@@ -300,16 +321,66 @@ mod tests {
     }
 
     #[test]
-    fn host_with_scheme_is_rejected() {
-        let err = NetworkClient::builder()
-            .host("https://unifi.local")
-            .api_key(key())
-            .build()
-            .err()
-            .expect("scheme in host is rejected");
-        assert!(
-            matches!(&err, Error::InvalidUrl(msg) if msg.contains("without scheme or path")),
-            "got {err:?}"
-        );
+    fn hosts_that_are_not_plain_authorities_are_rejected() {
+        for host in [
+            "",
+            "https://unifi.local",
+            "unifi.local/other",
+            "unifi.local?x=1",
+            "unifi.local#frag",
+            "user@unifi.local",
+            "evil.example\\@unifi.local",
+            "unifi .local",
+            "unifi.local\n",
+        ] {
+            let err = NetworkClient::builder()
+                .host(host)
+                .api_key(key())
+                .build()
+                .err()
+                .unwrap_or_else(|| panic!("{host:?} was accepted"));
+            assert!(
+                matches!(&err, Error::InvalidUrl(msg) if msg.contains("without scheme or path")),
+                "{host:?}: got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn plain_hosts_are_accepted() {
+        for host in [
+            "unifi.local",
+            "10.0.0.1:443",
+            "[fe80::1]:8443",
+            "my_console",
+        ] {
+            NetworkClient::builder()
+                .host(host)
+                .api_key(key())
+                .build()
+                .unwrap_or_else(|e| panic!("{host:?} was rejected: {e}"));
+        }
+    }
+
+    #[test]
+    fn base_urls_with_extras_are_rejected_without_echoing_them() {
+        for (url, expected) in [
+            ("ftp://unifi.local/x", "unsupported scheme"),
+            ("https://admin:hunter2@unifi.local/x", "credentials"),
+            ("https://unifi.local/x?a=1", "query or fragment"),
+            ("https://unifi.local/x#top", "query or fragment"),
+        ] {
+            let err = NetworkClient::builder()
+                .base_url(url)
+                .api_key(key())
+                .build()
+                .err()
+                .unwrap_or_else(|| panic!("{url:?} was accepted"));
+            let Error::InvalidUrl(msg) = &err else {
+                panic!("{url:?}: got {err:?}");
+            };
+            assert!(msg.contains(expected), "{url:?}: {msg}");
+            assert!(!msg.contains("hunter2"), "credentials leaked: {msg}");
+        }
     }
 }

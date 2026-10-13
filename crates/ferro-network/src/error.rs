@@ -93,7 +93,13 @@ impl Error {
 impl ApiError {
     fn from_body(status: StatusCode, body: &str) -> Self {
         match serde_json::from_str::<ErrorMessage>(body) {
-            Ok(parsed) => {
+            // Every field is optional, so any JSON object parses; only a
+            // body with at least one recognised field is an error message.
+            Ok(parsed)
+                if parsed.code.is_some()
+                    || parsed.status_name.is_some()
+                    || parsed.message.is_some() =>
+            {
                 let code = parsed
                     .code
                     .filter(|c| !c.is_empty())
@@ -106,8 +112,12 @@ impl ApiError {
                     request_id: parsed.request_id,
                 }
             }
-            Err(e) => {
-                warn!("API error body (HTTP {status}) did not match `Error Message`: {e}");
+            parsed => {
+                let reason = parsed.err().map_or_else(
+                    || "no code, statusName, or message field".to_string(),
+                    |e| e.to_string(),
+                );
+                warn!("API error body (HTTP {status}) did not match `Error Message`: {reason}");
                 Self {
                     status: status.as_u16(),
                     code: "unknown".to_string(),
@@ -195,6 +205,13 @@ mod tests {
         assert_eq!(err.code, "DeviceTimeout");
         assert_eq!(err.message, "Device connection timeout");
         assert_eq!(err.request_id.as_deref(), Some("a1b2c3"));
+    }
+
+    #[test]
+    fn json_without_recognised_fields_keeps_the_raw_body() {
+        let err = ApiError::from_body(StatusCode::UNAUTHORIZED, r#"{"error":"unauthorized"}"#);
+        assert_eq!(err.code, "unknown");
+        assert_eq!(err.message, r#"{"error":"unauthorized"}"#);
     }
 
     #[test]

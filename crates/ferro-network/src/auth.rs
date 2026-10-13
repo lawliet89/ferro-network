@@ -5,8 +5,10 @@
 use reqwest::header::{HeaderName, HeaderValue, InvalidHeaderValue};
 use secrecy::{ExposeSecret, SecretString};
 
-/// HTTP header the Network integration API expects. Not declared in the
-/// spec (it has no `securitySchemes`); confirmed live in phase 2.
+/// HTTP header the Network integration API is expected to take. Not
+/// declared in the spec (it has no `securitySchemes`); taken from
+/// Ubiquiti's integration docs and ferro-protect. **Not yet confirmed
+/// against a live console** (PLAN.md open question 2).
 pub const API_KEY_HEADER: HeaderName = HeaderName::from_static("x-api-key");
 
 pub struct ApiKey(SecretString);

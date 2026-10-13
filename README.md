@@ -72,16 +72,23 @@ set -a; source .env.local; set +a
 cargo test --features insecure-tls --all
 ```
 
-To poke at the real console with the CLI:
+To poke at the real console with the CLI (until phase 3 the CLI reads
+only flags, so pass them explicitly):
 
 ```sh
 set -a; source .env.local; set +a
 cargo run -p ferro-network-cli -- \
   --host "$UNIFI_NETWORK_HOST" \
   --api-key-file "$UNIFI_NETWORK_API_KEY_FILE" \
-  ${UNIFI_NETWORK_INSECURE:+--insecure} \
   info
 ```
+
+Through `UNIFI_NETWORK_BASE_URL` (e.g. the cloud connector) instead,
+replace `--host "$UNIFI_NETWORK_HOST"` with
+`--base-url "$UNIFI_NETWORK_BASE_URL"`. For a console with a self-signed
+certificate you cannot pin, add `--insecure` deliberately; the recipe
+never derives it from `UNIFI_NETWORK_INSECURE`, so a value like `0`
+cannot turn verification off by accident.
 
 #### Environment variables
 
