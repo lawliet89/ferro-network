@@ -613,6 +613,46 @@ the spec's documented syntax.
 **Trigger.** First spec bump that renames one of them, or the first
 external consumer. (Less pressing here: most IDs are `uuid::Uuid`.)
 
+### Publishing to crates.io
+
+**Symptom.** Both crates set `publish = false`. `build.rs` reads the
+spec from `third_party/unifi-apis`, outside the `ferro-network` package
+root, so a crates.io archive would not contain it and every registry
+build would fail in the build script.
+
+**Trigger.** A decision to publish (at the latest, phase 8 before
+tagging 0.1.0). Options then: copy the pinned spec into the package at
+`cargo package` time (an `include`d file kept in sync by
+`scripts/update-spec`, with `build.rs` preferring the submodule when
+present), or ship the generated `models` source. Either way, add a CI
+step that builds the packaged crate (`cargo package` + build from the
+`.crate`) so the failure mode stays covered.
+
+### Diagnosable decode errors for discriminated unions
+
+**Symptom.** Lifted unions are `#[serde(untagged)]` enums (see
+PROGRESS.md, phase 1). When a response drifts from the spec (a missing
+"required" field, say), serde reports only `data did not match any
+variant of untagged enum NetworkDetails`, not which field failed.
+
+**Trigger.** The first live decode failure on a union that takes more
+than a quick look to diagnose. Options then: a generated
+`Deserialize` that peeks at the tag and decodes the matching variant
+(post-processing typify's output in `build.rs`), or a debug helper that
+retries each variant and reports every error.
+
+### Firewall "named protocol" unions are not lifted
+
+**Symptom.** In the three `Firewall policy … named protocol` schemas
+the discriminator mapping keys (`AX_25`, `ICMPV6`) contradict the tag
+property's own `enum` (`ax.25`, `icmpv6`), so `lift_discriminators_to_one_of`
+leaves them as plain structs. The ICMP / ICMPv6 variants' extra
+`typenameFilter` field is unreachable through them.
+
+**Trigger.** Phase 5 firewall policies read (or phase 6 writes):
+capture a live policy that uses a named protocol, see which spelling
+the wire uses, and teach the rule that spelling.
+
 ---
 
 ## Reference: spec source

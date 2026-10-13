@@ -21,7 +21,7 @@ For *how the code is shaped*:
 
 - **Architecture overview** — [ARCHITECTURE.md](ARCHITECTURE.md).
   Diagram, file map, invariants, reading order.
-- **Spec upgrade procedure** — `UPGRADING.md` (lands in phase 1).
+- **Spec upgrade procedure** — [UPGRADING.md](UPGRADING.md).
 - **Historical decisions** — `PROGRESS.md` (created on first run).
   Chronological log; read when something in the code surprises you.
 
@@ -152,10 +152,14 @@ The user has commit signing configured and may require a passphrase.
 - Attempt the commit normally. If it fails because of a passphrase
   prompt, signing key issue, or anything signing-related:
   1. Stop. Do not retry with workarounds.
-  2. Tell the user the GPG cache likely needs warming:
+  2. Tell the user the GPG cache likely needs warming. The signing key
+     differs between the user's machines, so give the command that reads
+     it from git config rather than a literal key ID:
      ```sh
-     echo unlock | gpg --clearsign --local-user 5E42037421211E9D > /dev/null
+     echo unlock | gpg --clearsign --local-user "$(git config user.signingkey)" > /dev/null
      ```
+     Agents cannot run this themselves: pinentry needs the user's
+     terminal.
   3. List the staged files and the exact commit message, so the user
      can either tell you "done, retry" or run it themselves.
   4. Wait. Do not proceed past the commit.

@@ -2,8 +2,9 @@
 
 Async Rust client and CLI for the [UniFi Network](https://ui.com/) local
 integration API. Targets Network application version **11.0.81**. The
-workspace publishes two crates: the `ferro-network` library and the
-`ferro-network-cli` binary (`ferro-network`).
+workspace contains two crates: the `ferro-network` library and the
+`ferro-network-cli` binary (`ferro-network`). Neither is published to
+crates.io yet; build from a clone.
 
 ## Status
 
