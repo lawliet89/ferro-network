@@ -14,10 +14,11 @@ This document is a living one. It is updated whenever a phase changes a
 structural decision, adds a module category, or introduces an invariant.
 See [AGENT.md → Architecture documentation maintenance](AGENT.md#architecture-documentation-maintenance).
 
-> **Status: phase 1.** The codegen pipeline and the `models.rs` seam
-> exist; the client surface (phase 2 onward) does not yet. The diagram,
-> rationale, and invariants describe the target shape; the file map
-> describes what is on disk.
+> **Status: phase 2.** Codegen, the `models.rs` seam, a plain-`reqwest`
+> `NetworkClient` with `info()`, and the CLI's `info` command exist. The
+> middleware stack, pagination, and site handles (phase 4 onward) do not
+> yet. The diagram, rationale, and invariants describe the target shape;
+> the file map describes what is on disk.
 
 ---
 
@@ -221,6 +222,7 @@ module.
 | [deny.toml](deny.toml) | License allow-list, advisories, source allow-list. |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | fmt → clippy → test → deny. Refuses to run if `UNIFI_NETWORK_*` env vars are present. |
 | [scripts/pre-commit](scripts/pre-commit) | Local hook: fmt + clippy. |
+| [scripts/live-test](scripts/live-test) | Sources `.env.local`, runs the live tests with `insecure-tls` and `--nocapture`. |
 | [scripts/update-spec](scripts/update-spec) | No args: list spec versions in the submodule. With a version: fetch, bump `SPEC_VERSION`, run all four gates. |
 | [.env.example](.env.example) | Template for `UNIFI_NETWORK_*` vars. |
 | [docs/](docs/) | Chore briefs (`TASK_*.md`) and the historical bootstrap brief. |
@@ -232,10 +234,16 @@ module.
 | [Cargo.toml](crates/ferro-network/Cargo.toml) | Library manifest. |
 | [build.rs](crates/ferro-network/build.rs) | `SPEC_VERSION`; reads the spec, runs the rewrite, typify → `$OUT_DIR/generated.rs`. |
 | [build_support/spec_rewrite.rs](crates/ferro-network/build_support/spec_rewrite.rs) | Pure structural spec preprocessing (`rewrite()`); each rule documents the schemas that need it. Shared with tests via `#[path]`. |
-| [src/lib.rs](crates/ferro-network/src/lib.rs) | Crate root. |
+| [src/lib.rs](crates/ferro-network/src/lib.rs) | Crate root: quickstart doc, logging levels, public re-exports. |
+| [src/client.rs](crates/ferro-network/src/client.rs) | `NetworkClient`, its builder (`host` / `base_url`, `TlsMode`, timeouts), and the shared HTTP helpers (`get_json`). |
+| [src/error.rs](crates/ferro-network/src/error.rs) | `Error`, and `ApiError` decoded leniently from the `Error Message` body (or the cloud connector's error body). |
+| [src/auth.rs](crates/ferro-network/src/auth.rs) | `ApiKey(SecretString)` → sensitive `X-API-Key` header. |
 | [src/generated.rs](crates/ferro-network/src/generated.rs) | Private; `include!`s the typify output under one reasoned `#![allow]`. |
 | [src/models.rs](crates/ferro-network/src/models.rs) | **The seam.** Public re-exports of generated types; in-crate test for page DTOs (not re-exported). |
 | [tests/model_codegen.rs](crates/ferro-network/tests/model_codegen.rs) | Seam fingerprints, union round-trips, and unit tests for every rewrite rule. |
+| [tests/info.rs](crates/ferro-network/tests/info.rs) | Mocked (`wiremock`) tests per endpoint group; `info` is the first. |
+| [tests/live.rs](crates/ferro-network/tests/live.rs) | `live_read_*` / `live_write_*` tests; skip when no live target is configured. |
+| [tests/common/mod.rs](crates/ferro-network/tests/common/mod.rs) | `live_client()` from `UNIFI_NETWORK_*` env vars, `mutations_allowed()`. |
 | [tests/fixtures/](crates/ferro-network/tests/fixtures/) | Spec-shaped JSON fixtures. |
 
 ### `crates/ferro-network-cli/` (CLI)
@@ -243,7 +251,11 @@ module.
 | Path | What |
 |---|---|
 | [Cargo.toml](crates/ferro-network-cli/Cargo.toml) | CLI manifest; binary name `ferro-network`. |
-| [src/main.rs](crates/ferro-network-cli/src/main.rs) | Stub until phase 2. |
+| [src/main.rs](crates/ferro-network-cli/src/main.rs) | `clap` parser (global flags), client construction, command dispatch. |
+| [src/lib.rs](crates/ferro-network-cli/src/lib.rs) | Library half of the CLI, so internals are testable. |
+| [src/logging.rs](crates/ferro-network-cli/src/logging.rs) | `env_logger` setup: `--log-level` > `UNIFI_NETWORK_LOG` > `RUST_LOG` > `warn`, to stderr. |
+| [src/output.rs](crates/ferro-network-cli/src/output.rs) | `emit()` (JSON or human) and the `comfy-table` `table()` helper. |
+| [tests/](crates/ferro-network-cli/tests/) | `assert_cmd` end-to-end tests against `wiremock`; `common::isolated_cmd()` scrubs every env var the CLI reads. |
 
 ### `third_party/unifi-apis/` (submodule)
 
@@ -255,4 +267,13 @@ pinned at a specific commit. The current spec is
 
 ## Where to start reading
 
-_Filled in once there is code to read (phase 2)._
+1. [crates/ferro-network/src/client.rs](crates/ferro-network/src/client.rs):
+   how a request is built and how responses become `Result<T>`.
+2. [crates/ferro-network/src/error.rs](crates/ferro-network/src/error.rs):
+   what callers match on.
+3. [crates/ferro-network/src/models.rs](crates/ferro-network/src/models.rs):
+   which generated types are public, and why unions look the way they do.
+4. [crates/ferro-network-cli/src/main.rs](crates/ferro-network-cli/src/main.rs):
+   the CLI end to end; small enough to read in one sitting.
+5. [crates/ferro-network/build_support/spec_rewrite.rs](crates/ferro-network/build_support/spec_rewrite.rs):
+   only when codegen output surprises you.

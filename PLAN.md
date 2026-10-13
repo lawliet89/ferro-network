@@ -118,6 +118,24 @@ increasing blast radius** → actions → release. Reads always come first.
    Ask the user before writing the first `live_write_*` test. Until
    answered, mutating live tests are written but only exercised
    against whatever the user explicitly provides.
+2. **Phase 2 live verification route** — *open since 2026-10-13; no local
+   console available for now.* Options, researched 2026-10-13:
+   - **Local console** (or remote LAN access through Teleport / a
+     WireGuard VPN): verifies everything in phase 2 task 10.
+   - **Site Manager cloud connector**
+     (`https://api.ui.com/v1/connector/consoles/{id}/proxy/network/integration`,
+     Site Manager API key, UniFi OS ≥ 5.0.3, 100 req/min per console,
+     25 s / 10 MB caps, forwards writes too). Works today through
+     `UNIFI_NETWORK_BASE_URL`. Verifies the path layout below
+     `/integration` and real response shapes, but **not** the console's
+     own auth header or rate-limit headers (the connector authenticates
+     and throttles on its own).
+   - **UniFi OS Server** on a throwaway VM (no devices adopted):
+     reportedly serves the integration API with a local key on port
+     11443. Good for `info` / `sites` and empty lists; unverified.
+   Phase 2 is committed with task 10 outstanding; record the
+   measurements in PROGRESS.md when a route is chosen, and before phase
+   4 picks rate-limit defaults.
 
 ---
 
@@ -612,6 +630,18 @@ the spec's documented syntax.
 
 **Trigger.** First spec bump that renames one of them, or the first
 external consumer. (Less pressing here: most IDs are `uuid::Uuid`.)
+
+### Cloud connector convenience
+
+**Symptom.** Reaching a console through the Site Manager cloud connector
+needs the full `--base-url` (`https://api.ui.com/v1/connector/consoles/{id}/proxy/network/integration`).
+Connector-level errors (`408 DeviceTimeout`, `502`) and its `x-request-id`
+header are handled only generically.
+
+**Trigger.** Someone uses the connector routinely. Then: a builder
+method / `--console-id` flag that builds the URL, connector-specific
+error hints, and a default rate limit of 100 requests/min for that
+route.
 
 ### Publishing to crates.io
 

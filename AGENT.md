@@ -305,9 +305,12 @@ All vars share the `UNIFI_NETWORK_` prefix with the CLI. A single
 sourced `.env.local` drives both the CLI and the live tests.
 
 - `UNIFI_NETWORK_HOST` — hostname or `host:port`, no scheme prefix.
-  **Required.** Absence means all live tests skip.
+- `UNIFI_NETWORK_BASE_URL` — alternative to `HOST` (set only one): the
+  full base URL, e.g. the Site Manager cloud connector
+  (`https://api.ui.com/v1/connector/consoles/{id}/proxy/network/integration`).
+  Absence of both means all live tests skip.
 - `UNIFI_NETWORK_API_KEY_FILE` or `UNIFI_NETWORK_API_KEY` — at least
-  one required when `HOST` is set. File path or raw key.
+  one required when a target is set. File path or raw key.
 - `UNIFI_NETWORK_INSECURE` — non-empty/truthy ⇒ accept self-signed TLS.
 - `UNIFI_NETWORK_SITE` — site to run site-scoped live tests against
   (UUID or `internalReference`). Default: the site whose
@@ -315,8 +318,9 @@ sourced `.env.local` drives both the CLI and the live tests.
 - `UNIFI_NETWORK_ALLOW_MUTATIONS=1` — permits `live_write_*` tests.
   Test gate only; the CLI never reads it.
 
-If `HOST` is set but no key source is, the test helper **panics** with
-a clear message rather than silently skipping. A half-configured live
+If a target is set but no key source is (or both targets are set), the
+test helper **panics** with a clear message rather than silently
+skipping. A half-configured live
 env is almost always a developer mistake.
 
 ### Test naming convention
