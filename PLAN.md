@@ -631,6 +631,20 @@ the spec's documented syntax.
 **Trigger.** First spec bump that renames one of them, or the first
 external consumer. (Less pressing here: most IDs are `uuid::Uuid`.)
 
+### TLS integration tests for `TlsMode::Pinned`
+
+**Symptom.** Only an invalid-PEM unit test covers `Pinned`. Nothing
+proves end to end that the pinned certificate is the only trust root,
+that an unpinned certificate fails, or that hostname verification stays
+on. The code is a one-line delegation to reqwest's `tls_certs_only`, so
+such tests would mostly exercise reqwest, at the cost of a local TLS
+server and certificate generation (~3 dev dependencies, e.g. `rcgen`,
+`tokio-rustls`).
+
+**Trigger.** The first time anyone uses `Pinned` against a real console
+(confirm it live then), any change to TLS setup beyond that delegation,
+or a bug report about pinning.
+
 ### Cloud connector convenience
 
 **Symptom.** Reaching a console through the Site Manager cloud connector
@@ -694,10 +708,10 @@ the wire uses, and teach the rule that spelling.
   structural preprocessing (phase 1).
 - Spec `servers` entry: `/integration`; paths begin with `/v1/...`.
 - Base URL on UniFi OS consoles: `https://{host}/proxy/network/integration`
-  (not in the spec; confirmed live in phase 2). Self-hosted Network
-  applications may differ — use `--base-url`.
-- Auth: `X-API-Key` request header (not declared in the spec; confirmed
-  live in phase 2).
+  (not in the spec; **live confirmation pending**, see open question 2).
+  Self-hosted Network applications may differ — use `--base-url`.
+- Auth: `X-API-Key` request header (not declared in the spec; **live
+  confirmation pending**, see open question 2).
 - Self-signed TLS is the norm on consoles — `--insecure` (cargo feature
   `insecure-tls`) or `TlsMode::Pinned`.
 

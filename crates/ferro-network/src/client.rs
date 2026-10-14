@@ -6,7 +6,7 @@ use log::{debug, info};
 use reqwest::header::HeaderMap;
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
-use url::Url;
+use url::{Host, Url};
 
 use crate::auth::{API_KEY_HEADER, ApiKey};
 use crate::error::{Error, Result};
@@ -22,7 +22,7 @@ const UNIFI_OS_PREFIX: &str = "/proxy/network/integration";
 /// Controls how the TLS stack validates the console's certificate.
 ///
 /// `Native` uses the platform trust store and is the safe default.
-/// `Pinned` trusts only the supplied PEM certificate (typical for a
+/// `Pinned` trusts only the supplied PEM certificate(s) (typical for a
 /// console's self-signed certificate, fetched once and saved). The
 /// certificate must still match the host you connect to.
 /// `AcceptInvalid` disables verification entirely and is only available
@@ -192,14 +192,28 @@ impl NetworkClientBuilder {
         let tls_label = self.tls.label();
         let mut builder = reqwest::Client::builder()
             .default_headers(headers)
+            // Never follow redirects: on a cross-origin redirect reqwest
+            // strips only standard credential headers (`Authorization`,
+            // cookies), not our custom `X-API-Key`, so following one could
+            // hand the key to another host. The integration API has no
+            // reason to redirect; a 3xx surfaces as `Error::Api`.
+            .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(DEFAULT_CONNECT_TIMEOUT)
             .timeout(DEFAULT_TOTAL_TIMEOUT);
         builder = match self.tls {
             TlsMode::Native => builder,
             TlsMode::Pinned(pem) => {
-                let cert = reqwest::Certificate::from_pem(&pem)
+                // `Certificate::from_pem` accepts input with no PEM block
+                // at all, which would leave a client trusting nothing; the
+                // bundle parser lets us insist on at least one certificate.
+                let certs = reqwest::Certificate::from_pem_bundle(&pem)
                     .map_err(|e| Error::Other(format!("invalid pinned certificate: {e}")))?;
-                builder.tls_certs_only([cert])
+                if certs.is_empty() {
+                    return Err(Error::Other(
+                        "invalid pinned certificate: no PEM certificate found".into(),
+                    ));
+                }
+                builder.tls_certs_only(certs)
             }
             #[cfg(feature = "insecure-tls")]
             TlsMode::AcceptInvalid => builder.tls_danger_accept_invalid_certs(true),
@@ -234,9 +248,11 @@ fn validate_host(host: &str) -> Result<()> {
 /// Parse a base URL, adding the trailing slash that `Url::join` needs to
 /// append (rather than replace) the last path segment.
 ///
-/// Rejects schemes other than `http(s)` and URLs carrying user-info, a
-/// query, or a fragment: none belongs in a base URL, and each would be
-/// silently dropped or mangled when request paths are joined on.
+/// Rejects schemes other than `https` (plus `http` to a loopback host,
+/// for local test servers: anywhere else plain HTTP would send the API
+/// key in cleartext), and URLs carrying user-info, a query, or a
+/// fragment: none belongs in a base URL, and each would be silently
+/// dropped or mangled when request paths are joined on.
 fn parse_base_url(raw: &str) -> Result<Url> {
     let mut raw = raw.to_string();
     if !raw.ends_with('/') {
@@ -245,8 +261,16 @@ fn parse_base_url(raw: &str) -> Result<Url> {
     // Errors never echo `raw`: it may contain credentials.
     let rejected = |problem: &str| Error::InvalidUrl(format!("base URL rejected: {problem}"));
     let url = Url::parse(&raw).map_err(|e| rejected(&e.to_string()))?;
-    if !matches!(url.scheme(), "https" | "http") {
-        return Err(rejected(&format!("unsupported scheme {:?}", url.scheme())));
+    match url.scheme() {
+        "https" => {}
+        "http" if is_loopback(&url) => {}
+        "http" => {
+            return Err(rejected(
+                "plain http is only allowed for loopback hosts; it would send the API key \
+                 in cleartext",
+            ));
+        }
+        other => return Err(rejected(&format!("unsupported scheme {other:?}"))),
     }
     if !url.username().is_empty() || url.password().is_some() {
         return Err(rejected("credentials in the URL are not supported"));
@@ -255,6 +279,15 @@ fn parse_base_url(raw: &str) -> Result<Url> {
         return Err(rejected("a base URL cannot have a query or fragment"));
     }
     Ok(url)
+}
+
+fn is_loopback(url: &Url) -> bool {
+    match url.host() {
+        Some(Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(Host::Ipv6(ip)) => ip.is_loopback(),
+        Some(Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
+        None => false,
+    }
 }
 
 #[cfg(test)]
@@ -347,6 +380,36 @@ mod tests {
     }
 
     #[test]
+    fn http_is_accepted_for_loopback_only() {
+        for url in [
+            "http://127.0.0.1:9000/x",
+            "http://[::1]:9000/x",
+            "http://localhost:9000/x",
+        ] {
+            NetworkClient::builder()
+                .base_url(url)
+                .api_key(key())
+                .build()
+                .unwrap_or_else(|e| panic!("{url:?} was rejected: {e}"));
+        }
+    }
+
+    #[test]
+    fn invalid_pinned_certificate_is_rejected() {
+        let err = NetworkClient::builder()
+            .host("unifi.local")
+            .api_key(key())
+            .tls(super::TlsMode::Pinned(b"not a certificate".to_vec()))
+            .build()
+            .err()
+            .expect("garbage PEM is rejected");
+        assert!(
+            matches!(&err, Error::Other(msg) if msg.contains("invalid pinned certificate")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
     fn plain_hosts_are_accepted() {
         for host in [
             "unifi.local",
@@ -366,6 +429,8 @@ mod tests {
     fn base_urls_with_extras_are_rejected_without_echoing_them() {
         for (url, expected) in [
             ("ftp://unifi.local/x", "unsupported scheme"),
+            ("http://unifi.local/x", "only allowed for loopback"),
+            ("http://10.0.0.1/x", "only allowed for loopback"),
             ("https://admin:hunter2@unifi.local/x", "credentials"),
             ("https://unifi.local/x?a=1", "query or fragment"),
             ("https://unifi.local/x#top", "query or fragment"),

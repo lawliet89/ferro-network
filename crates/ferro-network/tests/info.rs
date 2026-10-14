@@ -70,6 +70,37 @@ async fn info_unauthorized_maps_to_api_error() {
 }
 
 #[tokio::test]
+async fn redirects_are_not_followed_so_the_key_stays_put() {
+    let elsewhere = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(json_response(200, FIXTURE_OK))
+        .expect(0)
+        .mount(&elsewhere)
+        .await;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/info"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .insert_header("location", format!("{}/v1/info", elsewhere.uri())),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let err = client_for(&server)
+        .info()
+        .await
+        .expect_err("a redirect is an error");
+    assert!(
+        matches!(&err, Error::Api(api) if api.status == 302),
+        "got {err:?}"
+    );
+    // `elsewhere` verifies on drop that it received no request.
+}
+
+#[tokio::test]
 async fn info_schema_mismatch_is_a_json_error() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
