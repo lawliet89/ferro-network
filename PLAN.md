@@ -118,6 +118,24 @@ increasing blast radius** → actions → release. Reads always come first.
    Ask the user before writing the first `live_write_*` test. Until
    answered, mutating live tests are written but only exercised
    against whatever the user explicitly provides.
+2. **Phase 2 live verification route** — *open since 2026-10-13; no local
+   console available for now.* Options, researched 2026-10-13:
+   - **Local console** (or remote LAN access through Teleport / a
+     WireGuard VPN): verifies everything in phase 2 task 10.
+   - **Site Manager cloud connector**
+     (`https://api.ui.com/v1/connector/consoles/{id}/proxy/network/integration`,
+     Site Manager API key, UniFi OS ≥ 5.0.3, 100 req/min per console,
+     25 s / 10 MB caps, forwards writes too). Works today through
+     `UNIFI_NETWORK_BASE_URL`. Verifies the path layout below
+     `/integration` and real response shapes, but **not** the console's
+     own auth header or rate-limit headers (the connector authenticates
+     and throttles on its own).
+   - **UniFi OS Server** on a throwaway VM (no devices adopted):
+     reportedly serves the integration API with a local key on port
+     11443. Good for `info` / `sites` and empty lists; unverified.
+   Phase 2 is committed with task 10 outstanding; record the
+   measurements in PROGRESS.md when a route is chosen, and before phase
+   4 picks rate-limit defaults.
 
 ---
 
@@ -613,6 +631,32 @@ the spec's documented syntax.
 **Trigger.** First spec bump that renames one of them, or the first
 external consumer. (Less pressing here: most IDs are `uuid::Uuid`.)
 
+### TLS integration tests for `TlsMode::Pinned`
+
+**Symptom.** Only an invalid-PEM unit test covers `Pinned`. Nothing
+proves end to end that the pinned certificate is the only trust root,
+that an unpinned certificate fails, or that hostname verification stays
+on. The code is a one-line delegation to reqwest's `tls_certs_only`, so
+such tests would mostly exercise reqwest, at the cost of a local TLS
+server and certificate generation (~3 dev dependencies, e.g. `rcgen`,
+`tokio-rustls`).
+
+**Trigger.** The first time anyone uses `Pinned` against a real console
+(confirm it live then), any change to TLS setup beyond that delegation,
+or a bug report about pinning.
+
+### Cloud connector convenience
+
+**Symptom.** Reaching a console through the Site Manager cloud connector
+needs the full `--base-url` (`https://api.ui.com/v1/connector/consoles/{id}/proxy/network/integration`).
+Connector-level errors (`408 DeviceTimeout`, `502`) and its `x-request-id`
+header are handled only generically.
+
+**Trigger.** Someone uses the connector routinely. Then: a builder
+method / `--console-id` flag that builds the URL, connector-specific
+error hints, and a default rate limit of 100 requests/min for that
+route.
+
 ### Publishing to crates.io
 
 **Symptom.** Both crates set `publish = false`. `build.rs` reads the
@@ -664,10 +708,10 @@ the wire uses, and teach the rule that spelling.
   structural preprocessing (phase 1).
 - Spec `servers` entry: `/integration`; paths begin with `/v1/...`.
 - Base URL on UniFi OS consoles: `https://{host}/proxy/network/integration`
-  (not in the spec; confirmed live in phase 2). Self-hosted Network
-  applications may differ — use `--base-url`.
-- Auth: `X-API-Key` request header (not declared in the spec; confirmed
-  live in phase 2).
+  (not in the spec; **live confirmation pending**, see open question 2).
+  Self-hosted Network applications may differ — use `--base-url`.
+- Auth: `X-API-Key` request header (not declared in the spec; **live
+  confirmation pending**, see open question 2).
 - Self-signed TLS is the norm on consoles — `--insecure` (cargo feature
   `insecure-tls`) or `TlsMode::Pinned`.
 

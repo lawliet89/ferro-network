@@ -9,6 +9,10 @@ authors.workspace = true
 publish.workspace = true
 description = "Command-line tool for the UniFi Network local integration API."
 
+[lib]
+name = "ferro_network_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ferro-network"
 path = "src/main.rs"
@@ -17,4 +21,20 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-ferro-network = { path = "../ferro-network", version = "0.1.0" }
+ferro-network = { path = "../ferro-network", version = "0.1.0", features = ["insecure-tls"] }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+comfy-table = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+wiremock = { workspace = true }
+tempfile = { workspace = true }

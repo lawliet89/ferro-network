@@ -172,3 +172,66 @@ The hand-written fallback (request enums in `models.rs`,
 `serde_json::Value` for responses) was not needed.
 
 **Next**: none; phase 2 builds on these types.
+
+---
+
+## 2026-10-13 19:05 +0200 — Phase 2: `info` end to end (live checks outstanding)
+
+**Status**: partial — everything except task 10 (live measurements)
+
+**Summary**:
+Library: `Error` / `ApiError` (`error.rs`), `ApiKey` → sensitive
+`X-API-Key` header (`auth.rs`), and `NetworkClient` + builder
+(`client.rs`: `host` → `https://{host}/proxy/network/integration`,
+`base_url`, `TlsMode { Native, Pinned, AcceptInvalid (insecure-tls) }`,
+10 s / 30 s timeouts, `get_json`) with `info()` → `GET /v1/info`. CLI:
+`clap` global flags `--host`, `--base-url`, temporary `--api-key-file`,
+`--insecure`, `--json`, `--log-level`; `logging.rs` (flag >
+`UNIFI_NETWORK_LOG` > `RUST_LOG` > `warn`, stderr); `output.rs`
+(`emit`, `table`); `info` subcommand. Tests: mocked `info` (happy path,
+401 `Error Message`, schema mismatch), client builder unit tests,
+`live_read_info`, CLI `info` (human, `--json`, API error, missing/empty
+key file) and logging precedence. `scripts/live-test`, README "Running
+tests". All four gates green.
+
+**Files added/changed**:
+- `Cargo.toml`, `Cargo.lock`, both crate manifests
+- `crates/ferro-network/src/{lib,client,error,auth}.rs`
+- `crates/ferro-network/tests/{info,live}.rs`, `tests/common/mod.rs`, `tests/fixtures/info_unauthorized.json`
+- `crates/ferro-network-cli/src/{main,lib,logging,output}.rs`, `crates/ferro-network-cli/tests/{info,logging}.rs`, `tests/common/mod.rs`
+- `scripts/live-test`, `.env.example`, `README.md`, `AGENT.md` (live env contract), `ARCHITECTURE.md`, `PLAN.md`
+
+**Decisions / deviations**:
+- **Task 10 not done**: no console reachable. PLAN.md open question 2
+  records the routes (local / VPN, Site Manager cloud connector, UniFi OS
+  Server) and what each can verify. The base URL and `X-API-Key` header
+  remain unconfirmed; rate-limit data must exist before phase 4.
+- **`Error::Api(ApiError)`** instead of a struct variant: `ApiError` is
+  a public struct with its own `Display` (request ID appended on 5xx
+  only), which keeps matching simple (`Error::Api(e) => e.code`) and the
+  formatting logic in one tested place.
+- **`ErrorMessage` is hand-written and lenient** (every field optional),
+  not the generated type: typify makes the spec's required fields
+  mandatory, and an error path must never fail on a missing field. It
+  accepts `traceId` as `requestId`, so the cloud connector's own errors
+  (`{code, httpStatusCode, message, traceId}`) decode too.
+- **`host` + `base_url` together is a build error**, not "base_url
+  wins" as in ferro-protect: the plan calls them mutually exclusive.
+  `host` containing `/` is rejected up front, because
+  `https://https://x/...` parses as a URL.
+- **reqwest 0.13** (`rustls` feature, aws-lc-rs provider, platform
+  verifier). `Pinned` uses `tls_certs_only`, so the pinned certificate
+  is the *only* trust root; `AcceptInvalid` uses
+  `tls_danger_accept_invalid_certs` (the 0.12 names are deprecated).
+- **Success bodies decode via `serde_json::from_slice`**, so a schema
+  mismatch is `Error::Json` with serde's location, not an opaque
+  `reqwest` decode error.
+- **comfy-table 8**: `load_preset` became `load_style`.
+- **Live tests accept `UNIFI_NETWORK_BASE_URL`** as an alternative to
+  `HOST` (exactly one), so they can run through the cloud connector or a
+  self-hosted application without code changes.
+- CLI `--insecure` / `--json` are plain `bool` flags; phase 3 turns them
+  into `Option<bool>` for config-file overrides, as planned.
+
+**Next**: Phase 3 (API key resolver, config file). Phase 2 task 10 runs
+whenever a live route is available (PLAN.md open question 2).
